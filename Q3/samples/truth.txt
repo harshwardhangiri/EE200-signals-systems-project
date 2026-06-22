@@ -1,0 +1,5 @@
+sample1	Two Of Us
+sample2	Crazy Little Thing Called Love
+sample3	A Hard Day_s Night
+sample4	Within You Without You
+sample5	Hey Jude
