@@ -14,8 +14,8 @@ import matplotlib.pyplot as plt
 from fingerprint import (FingerprintDB, load_audio, compute_spectrogram,
                          find_peaks, peaks_to_hashes, SR, N_FFT, HOP)
 
-DB_PATH = os.environ.get('SHAZAM_DB', 'database/db.pkl')
-THUMBS_DIR = 'thumbnails'
+DB_PATH = os.environ.get('SHAZAM_DB', os.path.join(os.path.dirname(__file__), 'database', 'db.pkl'))
+THUMBS_DIR = os.path.join(os.path.dirname(__file__), 'thumbnails')
 
 st.set_page_config(page_title="EE200 Audio Fingerprinting",
                    layout="wide", initial_sidebar_state="collapsed")
@@ -271,7 +271,7 @@ with tab_id:
                           label_visibility='collapsed')
 
     # ---- OR TRY A SAMPLE ----
-    SAMPLES_DIR = 'samples'
+    SAMPLES_DIR = os.path.join(os.path.dirname(__file__), 'samples')
     sample_files = []
     if os.path.isdir(SAMPLES_DIR):
         sample_files = sorted([f for f in os.listdir(SAMPLES_DIR)
