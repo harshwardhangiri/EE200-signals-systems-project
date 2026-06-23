@@ -67,14 +67,14 @@ audio → Hann-windowed STFT → dB-magnitude spectrogram
 
 **Verified on a 30-second query clip:** the system correctly identified "Two Of Us" with a cluster score of 11528 versus only 11 for the runner-up — a **1048× margin**, far above any noise floor. End-to-end identification takes under 100 ms after audio decoding.
 
-**Q3A: Algorithm and experiments** — spectrogram window-length trade-offs, single peaks vs. paired hashes, noise robustness, pitch-shift / time-stretch behavior. See [`Q3/report/`](./Q3/report/) for the full writeup.
+**Q3A: Algorithm and experiments** — spectrogram window-length trade-offs, **single peaks vs. paired hashes** (run `python single_vs_pairs.py` to reproduce: pair-hashing gives an **18× larger separation** from the runner-up), noise robustness (correct down to −5 dB SNR), pitch-shift / time-stretch behavior. See [`Q3/report/`](./Q3/report/) for the full writeup.
 
 **Q3B: Live deployed app** at [ee200-shazam-harsh.streamlit.app](https://ee200-shazam-harsh.streamlit.app) — three tabs:
 - **Library** — browse all 50 indexed songs with their constellation fingerprints
 - **Identify** — upload a clip, see the spectrogram, constellation, offset histogram, and matched song
 - **Batch** — process multiple clips, download `results.csv` with predictions
 
-**Deliverables:** `fingerprint.py`, `app.py`, `build_database.py`, `Q3_report.pdf`, deployed app
+**Deliverables:** `fingerprint.py`, `app.py`, `build_database.py`, `single_vs_pairs.py`, `report/Q3_EE200_Report.pdf`, deployed app
 
 ---
 
@@ -101,7 +101,8 @@ EE200-signals-systems-project/
     ├── fingerprint.py                 ← core algorithm
     ├── app.py                         ← Streamlit app (deployed at the URL above)
     ├── build_database.py              ← one-time indexing script
-    ├── generate_figures.py            ← report figures
+    ├── generate_figures.py            ← report figures (01–07)
+    ├── single_vs_pairs.py             ← Q3A experiment: single peaks vs paired hashes
     ├── requirements.txt               ← Python deps
     ├── packages.txt                   ← system deps (ffmpeg, libsndfile1)
     ├── database/
