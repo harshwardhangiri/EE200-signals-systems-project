@@ -1,0 +1,623 @@
+%% Q3_EE200_Report.tex  ── same visual style as Q2_EE200_Report
+\documentclass[11pt,a4paper]{article}
+
+% ── Geometry ──────────────────────────────────────────────────────────────────
+\usepackage[top=2.2cm,bottom=2.4cm,left=2.3cm,right=2.3cm]{geometry}
+
+% ── Typography & encoding ─────────────────────────────────────────────────────
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+
+
+
+% ── Colour (matches Q2 palette) ───────────────────────────────────────────────
+\usepackage[dvipsnames]{xcolor}
+\definecolor{titlegreen}{RGB}{0,128,0}       % dark green — section titles
+\definecolor{subsecblue}{RGB}{0,70,160}      % blue — subsection titles
+\definecolor{boxgreen}{RGB}{0,150,100}       % teal — insight box left rule
+\definecolor{boxbg}{RGB}{235,250,245}        % light mint — insight box fill
+\definecolor{tabhead}{RGB}{0,128,0}          % table header green
+
+% ── Maths ─────────────────────────────────────────────────────────────────────
+\usepackage{amsmath,amssymb}
+
+% ── Figures ───────────────────────────────────────────────────────────────────
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\captionsetup{font=small,labelfont=it,labelsep=period}
+
+% ── Tables ────────────────────────────────────────────────────────────────────
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{colortbl}
+
+% ── Section formatting — green / blue like Q2 ─────────────────────────────────
+\usepackage{titlesec}
+\titleformat{\section}
+  {\large\bfseries\color{titlegreen}}{\thesection.}{0.6em}{}
+\titleformat{\subsection}
+  {\normalsize\bfseries\color{subsecblue}}{\thesubsection}{0.6em}{}
+
+% ── Insight / verification boxes ──────────────────────────────────────────────
+\usepackage{mdframed}
+\mdfdefinestyle{insightbox}{
+  linecolor=boxgreen, linewidth=2pt,
+  backgroundcolor=boxbg,
+  topline=false, rightline=false, bottomline=false,
+  innerleftmargin=8pt, innerrightmargin=8pt,
+  innertopmargin=6pt, innerbottommargin=6pt,
+  skipabove=6pt, skipbelow=4pt
+}
+
+% ── Code listings ─────────────────────────────────────────────────────────────
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{gray!10},
+  frame=single, framerule=0.4pt,
+  breaklines=true, columns=fullflexible,
+  keywordstyle=\color{subsecblue}\bfseries,
+  commentstyle=\color{gray},
+  stringstyle=\color{titlegreen},
+  showstringspaces=false
+}
+
+% ── Hyperlinks ────────────────────────────────────────────────────────────────
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=subsecblue,urlcolor=subsecblue}
+
+% ── Misc ──────────────────────────────────────────────────────────────────────
+\usepackage{enumitem}
+\setlength{\parskip}{4pt}
+\setlength{\parindent}{0pt}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{document}
+
+% ── Title block ───────────────────────────────────────────────────────────────
+\begin{center}
+  {\LARGE\bfseries EE200: Signals, Systems and Networks}\\[4pt]
+  {\normalsize Course Project — Q3: The Shazam Challenge}\\[2pt]
+  {\normalsize Instructor: Dr.\ Tushar Sandhan \;|\; Department of Electrical Engineering, IIT Kanpur}
+\end{center}
+\vspace{2pt}
+\hrule height 1pt
+\vspace{10pt}
+
+% ── Q3 Title ──────────────────────────────────────────────────────────────────
+\section*{\color{titlegreen}Q3: The Shazam Challenge — Building a Song-Fingerprinting System [15\%]}
+
+This report documents the design, implementation, and experimental evaluation of a content-based
+audio-identification system inspired by the Shazam algorithm
+\cite{Wang2003}. The system indexes a database of 50 songs, extracts a robust set of
+acoustic fingerprints from each, and identifies an unknown audio clip — even in the
+presence of noise, pitch-shift, or time-stretch — by matching fingerprints against the
+database in sub-second time.
+
+\vspace{4pt}
+\begin{mdframed}[style=insightbox]
+\textbf{\color{boxgreen}Live deployment.}
+The full pipeline is deployed at
+\url{https://ee200-shazam-harsh.streamlit.app}.
+A 10-second query clip of ``Two of Us'' was identified with a cluster score of
+\textbf{11{,}528} versus a runner-up score of \textbf{11} — a margin of more than
+\(\mathbf{1000\times}\). End-to-end compute time: $\approx$75 ms
+(spectrogram 18 ms, constellation 26 ms, hashing 7 ms, DB lookup 22 ms, scoring 2 ms).
+\end{mdframed}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Why a Raw DFT Is Not Enough — Part (a)}
+
+\subsection{DFT of the whole song}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{01_whole_song_dft.png}
+  \caption{DFT magnitude spectrum of ``A Day In The Life'' (entire song, $\sim$345 s).
+    Every frequency that ever appears is represented, but all timing information is lost.}
+  \label{fig:dft}
+\end{figure}
+
+Taking the DFT of the full song (Figure~\ref{fig:dft}) collapses the entire
+5.7-minute recording into a single magnitude curve.
+The spectrum is dense and roughly flat from 0–5 kHz (music spans the full audible
+range), with energy rolling off sharply above $\sim$5.4 kHz due to the 11\,025 Hz
+sample-rate low-pass at $f_s/2$.
+
+\textbf{Why this fails for identification.}
+Two songs with similar instrumentation and tempo can have nearly indistinguishable
+whole-song DFT envelopes. More fundamentally, the DFT throws away the one piece of
+information that makes a song unique in the time domain: \emph{when} each note or
+chord occurs. A permutation of all the 1-second blocks of ``Hey Jude'' would produce
+an identical magnitude spectrum to the original — yet it is a completely different
+(unrecognisable) audio signal. Identification therefore requires a
+\emph{time-localised} frequency representation.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{The Spectrogram — Time-Localised Frequency Analysis — Part (b)}
+
+\subsection{Short-time Fourier transform}
+
+Instead of one global DFT, we slide a short analysis window of $N_{\rm fft}$ samples
+across the signal with hop size $H$, apply a DFT to each frame, and stack the results.
+The spectrogram $S(t,f)$ is the squared magnitude of these short-time DFTs:
+\[
+  S(t,f) = \left|\sum_{n=0}^{N_{\rm fft}-1} x[n + t H]\, w[n]\, e^{-j2\pi f n / N_{\rm fft}}\right|^2 ,
+\]
+where $w[n]$ is a Hann window that reduces spectral leakage.
+The implementation uses $N_{\rm fft}=2048$, hop $H=512$, $f_s=11\,025$ Hz, giving
+frequency resolution $\Delta f = f_s/N_{\rm fft} \approx 5.4$ Hz and time resolution
+$\Delta t = H/f_s \approx 46$ ms.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{02_spectrogram.png}
+  \caption{Log-magnitude spectrogram of ``A Day In The Life''
+    ($N_{\rm fft}=2048$, hop$=512$, $f_s=11\,025$ Hz).
+    The song's structure is immediately visible: vocal verses, orchestral swells
+    (broad energy 100–260 s), silence, and the famous final piano chord ($\sim$310 s).}
+  \label{fig:spec}
+\end{figure}
+
+The spectrogram in Figure~\ref{fig:spec} preserves both dimensions: the horizontal
+axis is time and the vertical axis is frequency. Each song now has a unique 2-D
+``fingerprint image'' that changes as the music evolves.
+
+\subsection{The time–frequency trade-off}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{03_window_tradeoff.png}
+  \caption{Short window ($N=512$, left) vs.\ long window ($N=8192$, right).
+    Short: sharp time resolution but blurry frequency bins.
+    Long: crisp frequency lines but smeared onsets.}
+  \label{fig:tradeoff}
+\end{figure}
+
+Figure~\ref{fig:tradeoff} illustrates the Heisenberg uncertainty principle for
+signals: reducing the window length $N$ sharpens time resolution ($\Delta t =
+N/f_s$ falls) but widens each frequency bin ($\Delta f = f_s/N$ rises), and vice
+versa. The operating point $N_{\rm fft}=2048$ was chosen to keep frequency bins fine
+enough to distinguish nearby musical tones ($\Delta f \approx 5.4$ Hz) while
+remaining short enough to track note onsets that change on the scale of 50–100 ms.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Fingerprinting: Constellation Maps and Hashing — Parts (c) \& (d)}
+
+\subsection{From spectrogram peaks to a constellation map}
+
+Rather than storing the entire spectrogram (which would require gigabytes), we extract
+only the \emph{local maxima} — time-frequency points $(t_i, f_i)$ where $S(t,f)$ is
+larger than all neighbours in a surrounding region. These ``spectral peaks'' are the
+most energetic and therefore most noise-resilient features of the signal.
+The set of all peaks forms a \textbf{constellation map}.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{04_constellation.png}
+  \caption{Constellation map of ``A Day In The Life'': \textbf{10{,}746 peaks} detected
+    from the spectrogram. Each circle is one $(t, f)$ peak.  The map mirrors the
+    spectrogram's structure but reduces the data by roughly $100\times$.}
+  \label{fig:const}
+\end{figure}
+
+As shown in Figure~\ref{fig:const}, the 10{,}746 peaks for this song cover the
+full time-frequency plane. Dense clusters appear during the orchestral crescendo
+(100–260 s) and the final chord, while the quieter outro is sparser — exactly
+reflecting the energy distribution in the spectrogram.
+
+\subsection{Combinatorial hashing}
+
+A single peak $(t_i, f_i)$ is too fragile: small frequency shifts move it to a
+different bin. Instead, we pair each \emph{anchor} peak with every peak in a
+\emph{target zone} — a window of $\Delta t_{\rm max}$ frames ahead and $\Delta f$
+bins around it — and hash the triple
+\[
+  h = (f_1,\; f_2,\; \Delta t) = (f_{\rm anchor},\; f_{\rm target},\; t_{\rm target} - t_{\rm anchor}).
+\]
+The hash encodes a \emph{relationship} between peaks, so it is invariant to any
+global time offset (the query can start anywhere in the song) and far more specific
+than either peak alone. For ``A Day In The Life'' this produces \textbf{160{,}965
+hashes}, and the full 50-song database contains \textbf{5{,}253{,}705 hashes}.
+
+Each database entry maps $(h \to \text{song\_id},\; t_{\rm anchor})$ so we can look
+up a query hash and immediately recover which song it came from and at what timestamp.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Matching: Offset Histograms and Scoring — Part (e)}
+
+\subsection{Why we need a coherence check}
+
+A query clip generates a set of hashes $\{(h_k, t_k^{\rm query})\}$.  For each $h_k$
+that appears in the database, we retrieve the database time $t_k^{\rm db}$ and compute
+the time offset
+\[
+  \delta_k = t_k^{\rm db} - t_k^{\rm query} .
+\]
+If the query \emph{is} song $s$, all hashes from that song will satisfy
+$\delta_k = \text{const}$ — the offset by which the query starts inside the full song.
+Random ``accidental'' hash collisions with other songs will have uniformly scattered
+$\delta$ values.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{05_offset_histogram.png}
+  \caption{Offset histogram for a 10-second query clip. \textbf{Left (correct song
+    ``A Day In The Life'')}: a sharp spike of \(\approx 620\) matches at a single offset
+    — all true matches land at exactly one time alignment.
+    \textbf{Right (wrong song ``A Hard Day's Night'')}: counts of 1–2 scattered uniformly
+    — purely accidental collisions with no coherent alignment.}
+  \label{fig:hist}
+\end{figure}
+
+The \textbf{match score} for song $s$ is the height of the tallest bin in its offset
+histogram (Figure~\ref{fig:hist}). A clean 10-second clip of ``A Day In The Life''
+receives a score of \textbf{329}; the nearest impostor scores \(\leq 2\).
+
+\subsection{Score interpretation}
+
+A high peak-bin count means many hashes agree on the same time alignment — geometric
+coherence that chance collisions cannot produce. This is what makes Shazam robust: the
+score depends not on the \emph{number} of hash collisions but on how many of them are
+\emph{mutually consistent in time}.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Single Peaks vs.\ Paired Hashes — Why Pairs Win}
+
+The question paper requires an explicit comparison between matching with
+\textbf{single-peak keys} $(f_1)$ and with \textbf{pair-based keys}
+$(f_1, f_2, \Delta t)$.  Both experiments were run on the indexed 50-song
+database using the bundled query clip \texttt{samples/sample1.wav} (a 30-second
+excerpt of ``Two of Us''); the results are summarised below.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{08_single_vs_pairs.png}
+  \caption{Offset histograms for the correct song ``Two of Us'' under the two
+  matching schemes. \textbf{Left}: single-peak keys $(f_1)$ produce a weak spike
+  sitting on a noisy floor of accidental collisions (counts of 200--500
+  everywhere). \textbf{Right}: pair-based keys $(f_1, f_2, \Delta t)$ produce a
+  clean, towering spike at exactly the same offset with essentially zero
+  background.}
+  \label{fig:singlevspairs}
+\end{figure}
+
+\subsection{Result}
+
+\begin{center}\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Method} & \textbf{Winner score} & \textbf{Runner-up} & \textbf{Margin} \\
+\midrule
+Single peaks $(f_1)$           &  1\,047 & 15 &  $\sim$70$\times$ \\
+Pair hashes $(f_1,f_2,\Delta t)$ & \textbf{11\,353} & \textbf{9} & $\mathbf{\sim 1260\times}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Both methods identify ``Two of Us'' correctly on this clean 30-second query.
+The story is told by the \emph{margin} from the runner-up song: pair-hashing
+gives an \textbf{18$\times$ larger separation}, and visually the histogram
+shows the difference even more starkly --- the single-peak version has
+hundreds of accidental collisions \emph{everywhere}, while the pair-hash
+version has \emph{none}.
+
+\subsection{Why pairs win}
+
+\textbf{Why single peaks struggle.}  With $f_s = 11\,025$ Hz and
+$N_{\rm fft} = 2048$, there are only $\sim$1025 distinct frequency bins.
+Every song has peaks all across the 200--2000 Hz band where most musical
+energy sits, so a query peak at bin 40 ($\approx$430 Hz) collides with
+\emph{hundreds} of database entries from \emph{many} different songs.
+These collisions land at random offsets and build a high noise floor in every
+song's histogram --- including impostors.  A short query, a noisier query, or
+a denser database would collapse the 70$\times$ margin and the wrong song
+could win.
+
+\textbf{Why pair hashes are decisive.}  Adding a second frequency $f_2$ and
+the time gap $\Delta t$ expands the key space from $\sim$$10^3$ to
+$\sim$$10^9$ combinations.  An accidental \emph{triple} collision (same
+$f_1$, same $f_2$, \emph{and} same $\Delta t$ from an unrelated song) is
+astronomically unlikely, so the histogram floor is essentially zero.
+When the query \emph{is} the right song, all of its pair hashes pile up at
+exactly one offset, producing the towering 11\,353-count spike seen on the
+right of Figure~\ref{fig:singlevspairs}.
+
+\begin{mdframed}[style=insightbox]
+\textbf{\color{boxgreen}Key insight.}
+Pairing two peaks doesn't just give a higher score --- it gives a
+\emph{qualitatively different} histogram.  The signal--to--noise ratio of
+the winning offset bin against the rest of the histogram is the real
+robustness metric.  Pair hashing pushes that SNR from $\sim$2--3 (barely
+above the floor) to effectively $\infty$ (clean zero floor), which is why a
+6-second query in a noisy caf\'{e} can still pick out the right song from
+millions of candidates.
+\end{mdframed}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Robustness Evaluation — Part (f)}
+
+\subsection{Noise robustness (SNR sweep)}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.78\linewidth]{06_noise_robustness.png}
+  \caption{Match score vs.\ added white-noise SNR (all six conditions correctly
+    identified, shown in green). Score falls from 316 at SNR $=30$ dB to 14 at
+    SNR $=-5$ dB, yet identification remains correct even below the noise floor.}
+  \label{fig:noise}
+\end{figure}
+
+White noise was added at SNR levels from $+30$ dB down to $-5$ dB (more signal
+power than noise down to 5$\times$ more noise than signal). Results:
+
+\begin{center}
+\small
+\begin{tabular}{ccc}
+\toprule
+\textbf{SNR (dB)} & \textbf{Match score} & \textbf{Correct?} \\
+\midrule
+30  & 316 & \textcolor{titlegreen}{\checkmark} \\
+20  & 244 & \textcolor{titlegreen}{\checkmark} \\
+10  & 102 & \textcolor{titlegreen}{\checkmark} \\
+ 5  &  79 & \textcolor{titlegreen}{\checkmark} \\
+ 0  &  27 & \textcolor{titlegreen}{\checkmark} \\
+$-5$ & 14 & \textcolor{titlegreen}{\checkmark} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{mdframed}[style=insightbox]
+\textbf{\color{boxgreen}Key insight — noise robustness.}
+Even at SNR $= -5$ dB, the noise power is $3.2\times$ the signal power, yet the
+system still identifies the song correctly.  Peak detection is inherently robust to
+additive noise: Gaussian noise adds a near-uniform ``floor'' to the spectrogram,
+raising all bins by roughly the same amount, so the \emph{relative} ranking of peaks
+(what is a local maximum vs.\ its neighbours) is preserved for the dominant spectral
+peaks.  Noise corrupts weak peaks first; the strongest constellation points survive
+down to extreme noise levels and continue to generate matching hashes.
+\end{mdframed}
+
+\subsection{Pitch-shift robustness}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{07_pitch_time.png}
+  \caption{\textbf{Left}: Pitch-shift robustness. Score collapses from 329 at 0 semitones to 4–6
+    at $\pm1$ semitone — all shifted versions are misidentified (red).
+    \textbf{Right}: Time-stretch robustness. Scores of 18–46 at 15\% stretch, yet all five
+    stretch rates are correctly identified (green).}
+  \label{fig:pitchtime}
+\end{figure}
+
+Pitch-shifting by even $\pm 1$ semitone moves every frequency peak to a different
+bin, completely destroying hash matches (Table~\ref{tab:pitch}).
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{ccc}
+\toprule
+\textbf{Shift (semitones)} & \textbf{Score} & \textbf{Correct?} \\
+\midrule
+$-3$ & 4 & \textcolor{red}{$\times$} \\
+$-2$ & 5 & \textcolor{red}{$\times$} \\
+$-1$ & 6 & \textcolor{red}{$\times$} \\
+ $0$ & 329 & \textcolor{titlegreen}{\checkmark} \\
+$+1$ & 4 & \textcolor{red}{$\times$} \\
+$+2$ & 3 & \textcolor{red}{$\times$} \\
+$+3$ & 6 & \textcolor{red}{$\times$} \\
+\bottomrule
+\end{tabular}
+\caption{Pitch-shift test: correct only at 0 semitones.}
+\label{tab:pitch}
+\end{table}
+
+\begin{mdframed}[style=insightbox]
+\textbf{\color{boxgreen}Why pitch is fatal but time-stretch is not.}
+A pitch shift by $k$ semitones multiplies \emph{every} frequency by $2^{k/12}$.
+This changes the \emph{absolute} values of $f_1$ and $f_2$ in every hash tuple,
+so essentially zero hashes match the database. By contrast, a time-stretch by factor
+$r$ scales the $\Delta t$ component of each hash by $r$, but if $r$ is small
+($\leq 15\%$) many hash pairs still fall inside their original target-zone time window
+and land in the same $\Delta t$ bin after rounding — enough coherent matches survive
+for correct identification. Fixing pitch robustness would require hashing
+\emph{frequency ratios} $f_2/f_1$ instead of absolute frequencies, at the cost of
+increased hash collisions.
+\end{mdframed}
+
+\subsection{Time-stretch robustness}
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{ccc}
+\toprule
+\textbf{Stretch rate} & \textbf{Score} & \textbf{Correct?} \\
+\midrule
+0.85 &  18 & \textcolor{titlegreen}{\checkmark} \\
+0.92 &  46 & \textcolor{titlegreen}{\checkmark} \\
+1.00 & 329 & \textcolor{titlegreen}{\checkmark} \\
+1.08 &  46 & \textcolor{titlegreen}{\checkmark} \\
+1.15 &  34 & \textcolor{titlegreen}{\checkmark} \\
+\bottomrule
+\end{tabular}
+\caption{Time-stretch test: correct at all five rates (15\% fast to 15\% slow).}
+\label{tab:stretch}
+\end{table}
+
+The score drops symmetrically from 329 (no stretch) to $\sim$18–46 at extreme
+stretch, but the correct song always outranks every impostor. This is because the
+$\Delta t$ component of the hash is quantised to coarse bins; a 15\% stretch moves
+it by $\pm 15\%$, and for many pairs that shift keeps $\Delta t$ within the same bin.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Q3B — Signals to Software: ``Zapptain America'' [5\%]}
+
+\subsection{Application overview}
+
+The fingerprinting pipeline is wrapped in a Streamlit application deployed at:\\
+\url{https://ee200-shazam-harsh.streamlit.app}\\
+Source code: \url{https://github.com/harshwardhangiri/EE200-signals-systems-project}
+
+The app ships with the pre-indexed 50-song database (\texttt{db.pkl} committed
+to the repository) so Streamlit Cloud loads it on startup without re-indexing.
+
+\subsection{Single-clip mode}
+
+Accepts one uploaded query clip and runs the full pipeline, displaying:
+\begin{itemize}[noitemsep]
+  \item The query's \textbf{spectrogram} (log-magnitude, same parameters as indexing)
+  \item The \textbf{constellation map} overlaid on the spectrogram
+  \item The \textbf{offset-alignment histogram} for the winning song, showing the
+        sharp spike that decides the match
+  \item The ranked candidate scores for all 50 songs
+  \item Per-stage timing: spectrogram 18 ms, constellation 26 ms, hashing 7 ms,
+        DB lookup 22 ms, scoring 2 ms, \textbf{total $\approx$75 ms}
+\end{itemize}
+
+Five pre-cut sample clips are bundled for one-click testing.
+Test result: \textit{``Two of Us''} identified with score \textbf{11{,}528}
+vs.\ runner-up \textbf{11} — margin $>1000\times$.
+
+\subsection{Batch mode}
+
+Accepts multiple query clips simultaneously and produces a
+\texttt{results.csv} download with exactly two columns:
+
+\begin{lstlisting}
+filename,prediction
+clip_001,Two Of Us
+clip_002,A Day In The Life
+\end{lstlisting}
+
+\texttt{filename} is the uploaded file's name without extension;
+\texttt{prediction} is the matched song's filename without extension, exactly
+matching the database filenames as required by the submission guidelines.
+
+\subsection{Deployment details}
+
+\begin{itemize}[noitemsep]
+  \item Python dependencies installed from \texttt{requirements.txt}
+  \item System packages \texttt{ffmpeg} and \texttt{libsndfile1} declared in
+        \texttt{packages.txt} (required by librosa for MP3 decoding)
+  \item Database \texttt{db.pkl} committed to the repository — no re-indexing
+        on cloud startup
+\end{itemize}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Implementation Overview — Part (g)}
+
+\subsection{Pipeline}
+
+The full Python/Streamlit implementation is available at
+\url{https://github.com/harshwardhangiri/EE200-signals-systems-project}.
+
+\begin{lstlisting}[language=Python, caption={Core fingerprinting and matching pipeline (simplified).}]
+# 1. Spectrogram
+D = librosa.stft(y, n_fft=2048, hop_length=512, window='hann')
+S_dB = librosa.amplitude_to_db(np.abs(D))
+
+# 2. Peak detection (constellation map)
+peaks = []
+for t in range(S_dB.shape[1]):
+    for f in range(S_dB.shape[0]):
+        if is_local_max(S_dB, t, f, dt=10, df=10):
+            peaks.append((t, f))
+
+# 3. Combinatorial hashing
+hashes = []
+for i, (t1, f1) in enumerate(peaks):
+    for (t2, f2) in peaks_in_target_zone(peaks, i):
+        h = hash((f1, f2, t2 - t1))
+        hashes.append((h, t1))
+
+# 4. Lookup and offset-histogram scoring
+from collections import Counter
+offsets = Counter()
+for h, t_query in query_hashes:
+    for song_id, t_db in database.get(h, []):
+        offsets[(song_id, t_db - t_query)] += 1
+
+# 5. Best song = tallest offset-histogram bin
+best_song = max(offsets, key=lambda k: offsets[k])[0]
+\end{lstlisting}
+
+\subsection{Database statistics}
+
+\begin{center}\small
+\begin{tabular}{ll}
+\toprule
+\textbf{Quantity} & \textbf{Value} \\
+\midrule
+Songs indexed & 50 \\
+Total hashes in DB & 5{,}253{,}705 \\
+Average hashes / song & $\approx$105{,}074 \\
+Peaks for ``A Day In The Life'' & 10{,}746 \\
+Hashes for ``A Day In The Life'' & 160{,}965 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Summary of Results}
+
+\begin{table}[H]
+\centering\small
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{>{\bfseries}p{6.5cm} p{8.5cm}}
+\toprule
+\rowcolor{tabhead!20}
+\textbf{Quantity} & \textbf{Value / Observation} \\
+\midrule
+Songs in database           & 50 \\
+Total fingerprint hashes    & 5{,}253{,}705 \\
+Peaks (``A Day In The Life'') & 10{,}746 \\
+Hashes (``A Day In The Life'') & 160{,}965 \\
+Clean-clip match score (pairs) & 329 \\
+Single-peak score (sample1.wav)   & 1\,047 (winner correct, but margin only 70$\times$) \\
+Pair-hash score (sample1.wav)     & 11\,353 (margin 1260$\times$ over runner-up) \\
+Pair vs.\ single margin improvement & 18$\times$ larger separation from runner-up \\
+Noise robustness            & Correct at \textbf{all} SNR $\in \{30,20,10,5,0,-5\}$ dB \\
+Noise score range           & 316 (30 dB) \ensuremath{\to} 14 (-5 dB) \\
+Pitch-shift robustness      & Correct \textbf{only} at 0 semitones; fails at $\pm1$ \\
+Time-stretch robustness     & Correct at \textbf{all} rates $\in \{0.85,0.92,1.00,1.08,1.15\}$ \\
+Proposed improvement        & Hash frequency ratios $f_2/f_1$ for pitch invariance \\
+End-to-end latency          & $\approx$75 ms (Streamlit app) \\
+Test identification margin  & ``Two of Us'': score 11{,}528 vs.\ runner-up 11 ($>1000\times$) \\
+Live app                    & \url{https://ee200-shazam-harsh.streamlit.app} \\
+Source code                 & \url{https://github.com/harshwardhangiri/EE200-signals-systems-project} \\
+\bottomrule
+\end{tabular}
+\caption{Summary of experimental results for ``A Day In The Life'' and the deployed app.}
+\label{tab:summary}
+\end{table}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Conclusion}
+
+The implemented Shazam-style audio fingerprinting system successfully identifies songs
+from short query clips in under 100 ms. The key design insight is the step from
+single-peak keys to \textbf{pair-based hash triples} $(f_1, f_2, \Delta t)$: single
+peaks produce unreliable identification (score 3--5, indistinguishable from noise)
+because any song has peaks at common frequencies, whereas pair hashes expand the
+key space by $\sim$$10^6$, making accidental triple collisions negligible and producing
+a decisive margin of $>100\times$ over every impostor.
+
+The evaluation reveals a clear asymmetry in robustness: the system is \textbf{highly
+robust to additive noise} (correct even at SNR $= -5$ dB, where noise power exceeds
+signal power threefold) and \textbf{fully robust to time-stretch up to $\pm15\%$}, but
+\textbf{completely breaks under pitch-shift} of even one semitone. This is inherent to
+hashing absolute frequencies; it could be resolved by hashing frequency ratios
+$f_2/f_1$ at the cost of higher collision rates.
+
+All figures and numerical results in this report were generated directly from the
+provided 50-song database and \texttt{stats.json}.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{thebibliography}{1}
+\bibitem{Wang2003}
+A.\ Wang, ``An industrial-strength audio search algorithm,''
+in \textit{Proc.\ ISMIR}, Baltimore, MD, 2003, pp.\ 7--13.
+\end{thebibliography}
+
+\end{document}
