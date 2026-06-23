@@ -6,27 +6,35 @@
 
 ---
 
+## 🚀 Quick Links
+
+- **🎵 Live Audio Fingerprinting App (Q3B):** [ee200-shazam-harsh.streamlit.app](https://ee200-shazam-harsh.streamlit.app)
+- **📦 Source repository:** [github.com/harshwardhangiri/EE200-signals-systems-project](https://github.com/harshwardhangiri/EE200-signals-systems-project)
+
+---
+
 ## Overview
 
 This repository contains my complete submission for the EE200 course project, covering three problems that apply 1D and 2D signal-processing techniques to real-world data — image restoration, biomedical signals, and audio identification.
 
 | Problem | Title | Marks | Folder |
 |---|---|---|---|
-| **Q1A** | Frequency Forensics — *The Ghost Signal* | 3% | [`Q1_image_processing/`](./Q1_image_processing/) |
-| **Q1B** | Digital Detective — *Missing Boundaries* | 2% | [`Q1_image_processing/`](./Q1_image_processing/) |
-| **Q2** | The Midnight Episode — *Catching the Arrhythmia* | 7.5% | [`Q2_arrhythmia_detection/`](./Q2_arrhythmia_detection/) |
-| **Q3A** | Sonic Signatures — *Magical Mystery Tune* | 7.5% | [`Q3_audio_fingerprinting/`](./Q3_audio_fingerprinting/) |
-| **Q3B** | Signals to Softwares — *Zapptain America* | 5% | [`Q3_audio_fingerprinting/`](./Q3_audio_fingerprinting/) |
+| **Q1** | Frequency Forensics + Digital Detective — *Ghost Signal & Missing Boundaries* | 5% | [`Q1/`](./Q1/) |
+| **Q2** | The Midnight Episode — *Catching the Arrhythmia* | 7.5% | [`Q2/`](./Q2/) |
+| **Q3A** | Sonic Signatures — *Magical Mystery Tune* | 7.5% | [`Q3/`](./Q3/) |
+| **Q3B** | Signals to Softwares — *Zapptain America* | 5% | [`Q3/`](./Q3/) + [live app](https://ee200-shazam-harsh.streamlit.app) |
 
 ---
 
-## Q1 — Image Processing
+## Q1 — Image Processing (Q1A + Q1B together)
 
-**Q1A: Frequency-Domain Image Recovery.** A grayscale image is corrupted by periodic interference. The corruption appears as localized spikes in the 2D Fourier magnitude spectrum, far from the low-frequency content of the underlying image. By transforming to the frequency domain, identifying and zeroing the interference peaks, and applying the inverse DFT, the hidden message is recovered.
+Both image-processing problems are solved in a single Jupyter notebook that walks through the full pipeline end-to-end.
 
-**Q1B: Edge Detection with Sobel.** A 2D convolution with the Sobel kernels (horizontal and vertical derivative approximations) extracts the gradient magnitude of the image, revealing object boundaries. The notebook explores the effect of pre-smoothing on noise vs. edge sharpness.
+**Q1A — Frequency-Domain Image Recovery (3%).** A grayscale image is corrupted by periodic interference. The corruption appears as localized spikes in the 2D Fourier magnitude spectrum, far from the low-frequency content of the underlying image. By transforming to the frequency domain, identifying and zeroing the interference peaks, and applying the inverse DFT, the hidden message is recovered.
 
-**Deliverables:** `Q1A_frequency_forensics.ipynb`, `Q1B_edge_detection.ipynb`, `Q1_report.pdf`
+**Q1B — Edge Detection with Sobel (2%).** A 2D convolution with the Sobel kernels (horizontal and vertical derivative approximations) extracts the gradient magnitude of the image, revealing object boundaries. The notebook explores the effect of pre-smoothing on noise vs. edge sharpness.
+
+**Deliverables:** `Q1_EE200_Solution.ipynb` (covers both A and B), `Q1_EE200_Report.pdf`, `input/` (provided input images)
 
 ---
 
@@ -40,7 +48,7 @@ A 20-second Holter-monitor ECG (5000 samples at fs = 250 Hz) contains an arrhyth
 
 **Result:** Onset detected at **t = 9.6 s** (sample 2400, the 13th beat) where the QRS spike inverts and ρ ≈ −0.99. Four independent methods — beat-by-beat correlation, sample-by-sample sliding correlation, spectrogram analysis, and RR-interval statistics — all converge on the same onset time.
 
-**Deliverables:** `Q2_EE200.ipynb`, `Q2_EE200_Report.pdf`
+**Deliverables:** `Q2_EE200.ipynb`, `Q2_EE200_Report.pdf`, `input/` (patient_ecg.npy, template.npy)
 
 ---
 
@@ -57,13 +65,16 @@ audio → Hann-windowed STFT → dB-magnitude spectrogram
      → song with the tallest offset-histogram spike wins
 ```
 
-**Q3A: Algorithm and experiments** — spectrogram window-length trade-offs, single peaks vs. paired hashes, noise robustness, pitch-shift / time-stretch behavior.
+**Verified on a 30-second query clip:** the system correctly identified "Two Of Us" with a cluster score of 11528 versus only 11 for the runner-up — a **1048× margin**, far above any noise floor. End-to-end identification takes under 100 ms after audio decoding.
 
-**Q3B: Deployed Streamlit web app** with three tabs — Library (50 indexed songs), Identify (single-clip mode with intermediate visualizations), Batch (multiple clips → `results.csv`).
+**Q3A: Algorithm and experiments** — spectrogram window-length trade-offs, single peaks vs. paired hashes, noise robustness, pitch-shift / time-stretch behavior. See [`Q3/report/`](./Q3/report/) for the full writeup.
 
-🔗 **Live app:** *(coming soon — link will be added after deployment)*
+**Q3B: Live deployed app** at [ee200-shazam-harsh.streamlit.app](https://ee200-shazam-harsh.streamlit.app) — three tabs:
+- **Library** — browse all 50 indexed songs with their constellation fingerprints
+- **Identify** — upload a clip, see the spectrogram, constellation, offset histogram, and matched song
+- **Batch** — process multiple clips, download `results.csv` with predictions
 
-**Deliverables:** `fingerprint.py`, `app.py`, `build_database.py`, `Q3_report.pdf`, deployed app link
+**Deliverables:** `fingerprint.py`, `app.py`, `build_database.py`, `Q3_report.pdf`, deployed app
 
 ---
 
@@ -73,30 +84,32 @@ audio → Hann-windowed STFT → dB-magnitude spectrogram
 EE200-signals-systems-project/
 ├── README.md                          ← you are here
 ├── .gitignore
+├── requirements.txt                   ← root-level deps (for Streamlit Cloud)
+├── packages.txt                       ← root-level system deps
 │
-├── Q1_image_processing/
-│   ├── Q1A_frequency_forensics.ipynb
-│   ├── Q1B_edge_detection.ipynb
-│   ├── Q1_report.pdf
-│   └── inputs/                        ← provided input images
+├── Q1/
+│   ├── Q1_EE200_Solution.ipynb        ← Q1A + Q1B in one notebook
+│   ├── Q1_EE200_Report.pdf
+│   └── input/                         ← provided input images
 │
-├── Q2_arrhythmia_detection/
+├── Q2/
 │   ├── Q2_EE200.ipynb
 │   ├── Q2_EE200_Report.pdf
-│   └── data/                          ← patient_ecg.npy, template.npy
+│   └── input/                         ← patient_ecg.npy, template.npy
 │
-└── Q3_audio_fingerprinting/
+└── Q3/
     ├── fingerprint.py                 ← core algorithm
-    ├── app.py                         ← Streamlit app
+    ├── app.py                         ← Streamlit app (deployed at the URL above)
     ├── build_database.py              ← one-time indexing script
     ├── generate_figures.py            ← report figures
     ├── requirements.txt               ← Python deps
     ├── packages.txt                   ← system deps (ffmpeg, libsndfile1)
     ├── database/
-    │   ├── songs/                     ← drop the 50 provided songs here
-    │   └── db.pkl                     ← created by build_database.py
-    ├── samples/                       ← short demo clips
+    │   ├── songs/                     ← (50 provided songs go here locally; not committed)
+    │   └── db.pkl                     ← pre-built fingerprint index
+    ├── samples/                       ← short demo clips for the app
     ├── figures/                       ← report figures
+    ├── thumbnails/                    ← constellation thumbnails for the Library tab
     └── report/                        ← LaTeX source + compiled PDF
 ```
 
@@ -104,16 +117,21 @@ EE200-signals-systems-project/
 
 ## How to run each part locally
 
-**Q1 and Q2** — open the `.ipynb` files in Jupyter Notebook or VS Code and run all cells. Requires `numpy`, `scipy`, `matplotlib`. For Q2 also requires the provided `.npy` data files.
+**Q1** — open `Q1/Q1_EE200_Solution.ipynb` in Jupyter or VS Code and run all cells. Requires `numpy`, `scipy`, `matplotlib`, and the input images in `Q1/input/`.
+
+**Q2** — open `Q2/Q2_EE200.ipynb` in Jupyter or VS Code and run all cells. Requires `numpy`, `scipy`, `matplotlib`, and the data files in `Q2/input/`.
 
 **Q3 — run the Streamlit app:**
 ```bash
-cd Q3_audio_fingerprinting
+cd Q3
 pip install -r requirements.txt
 # drop the 50 provided songs into database/songs/
 python build_database.py          # creates database/db.pkl
 streamlit run app.py              # opens the app on http://localhost:8501
 ```
+
+Or just visit the **live deployed version** — no setup required:
+👉 **[ee200-shazam-harsh.streamlit.app](https://ee200-shazam-harsh.streamlit.app)**
 
 ---
 
@@ -130,6 +148,6 @@ streamlit run app.py              # opens the app on http://localhost:8501
 
 ## Author
 
-**Harshwardhan Giri** — Department of Electrical Engineering, IIT Kanpur
+**Harshwardhan Giri Goswami** — Department of Aerospace Engineering, IIT Kanpur
 
 *Built as the final project for EE200: Signals, Systems and Networks, Summer 2026.*
